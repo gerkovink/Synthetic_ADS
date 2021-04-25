@@ -1,0 +1,79 @@
+---
+title: "Aim of the project"
+author: "Gerko Vink"
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+
+# Load packages
+```{r, message=FALSE}
+library(mice)
+library(readr)
+```
+
+---
+
+# Read in the data
+The following data are obtained from [Kaggle](https://www.kaggle.com/uciml/pima-indians-diabetes-database)
+```{r}
+data <- read_csv("Data/diabetes.csv", 
+                 col_types = cols(Pregnancies = col_integer(), 
+                                  Glucose = col_integer(), 
+                                  BloodPressure = col_integer(), 
+                                  SkinThickness = col_integer(), 
+                                  Insulin = col_integer(), 
+                                  Age = col_integer(), 
+                                  Outcome = col_factor(levels = c("1", "0"))))
+```
+
+---
+
+# Aim
+The aim of the project is to 
+
+1. Formulate an analysis model
+2. Run the analysis model on the data set to obtain the *true* data inference
+3. Obtain statistical properties of the *true* data set, such as
+- `mean()`
+- `variance()`
+- `cor()`
+- etc. 
+4. Plot the distributions of the *true* data set
+5. Simulate `nsim = 1000` times the following:
+- a. synthesize the data $m$ times with `mice`
+- b. calculate the same statistical properties as under (3) on each of the $m$ synthetic sets
+- c. Run the analysis model on each of the $m$ synthetic sets
+- d. Combine the $m$ statistics and parameters from (5b) and (5c) into single inferences
+- e. For each of the $m$ imputed sets, combine half of the imputed set randomly with half of the *true* set, adding an indicator column `Synth_or_True` to identify the true vs. the synthetic rows. 
+- f. Run a prediction model that predicts `Synth_or_True ~ .`
+- g. Pool the model parameters over the $m$ sets and record the accuracy 
+6. Analyze the simulation results by
+- a. Calculating the average parameters and statistics over the `nsim = 1000` simulations
+- b. Plotting the distributions of the statistics and parameters with e.g. boxplots
+- c. Calculating the sampling variance of the statistics and parameters by means of the bootstrap
+- d. Calculating the sampling variance of the model parameters by means of pooling rules. 
+- e. Calculating the 95% coverage rates of the parameters and statistics (bootstrap and pooling)
+7. Evaluate the results and determine if and when `mice` would yield valid synthetic sets. 
+
+---
+
+# Inspiration
+
+- Study the materials in [this repository](https://github.com/amices/Federated_imputation)
+
+---
+
+# Session
+```{r}
+sessionInfo()
+```
+
+---
+
+End of document
