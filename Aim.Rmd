@@ -56,9 +56,9 @@ The aim of the project is to
 6. Analyze the simulation results by
 - a. Calculating the average parameters and statistics over the `nsim = 1000` simulations
 - b. Plotting the distributions of the statistics and parameters with e.g. boxplots
-- c. Calculating the sampling variance of the statistics and parameters by means of the bootstrap
-- d. Calculating the sampling variance of the model parameters by means of pooling rules. 
-- e. Calculating the 95% coverage rates of the parameters and statistics (bootstrap and pooling)
+- c. Calculating for all statistics and parameters the bootstrap CI.
+- d. Calculating for all parameters the parametric CI cf. Rubin's rules.  
+- e. Calculating the 95% coverage rates of the parameters and statistics (bootstrap CI and parametric CI)
 7. Evaluate the results and determine if and when `mice` would yield valid synthetic sets. 
 
 ---
