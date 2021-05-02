@@ -13,7 +13,10 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Load packages
 ```{r, message=FALSE}
+set.seed(123)
 library(mice)
+library(dplyr)
+library(magrittr)
 library(readr)
 ```
 
@@ -30,6 +33,10 @@ data <- read_csv("Data/diabetes.csv",
                                   Insulin = col_integer(), 
                                   Age = col_integer(), 
                                   Outcome = col_factor(levels = c("1", "0"))))
+data %<>% mutate_at(vars(2:8), na_if, y = 0)
+imp <- mice(data, m=1, maxit = 35, method = "pmm", print = FALSE)
+plot(imp)
+data_nozero <- complete(imp)
 ```
 
 ---
