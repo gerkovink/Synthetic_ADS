@@ -1,0 +1,51 @@
+---
+title: "Analysis"
+author: "Stijn van den Broek"
+date: "02/05/2021"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(corrplot)
+```
+
+```{r}
+data = read.csv('diabetes.csv')
+```
+
+```{r}
+analysis_model = function(dataframe) {
+  model = glm(Outcome~Pregnancies+Glucose, data = dataframe, family = "binomial")
+  print(summary(model))
+}
+```
+
+```{r}
+statistical_properties = function(dataframe) {
+  print(apply(dataframe, 2, mean))
+  print(apply(dataframe, 2, var))
+  print(corrplot(cor(dataframe), method = "color"))
+}
+```
+
+```{r}
+dataset_distribution = function(dataframe) {
+  ggplot(gather(dataframe), aes(value)) + 
+    geom_histogram(bins = 10) + 
+    facet_wrap(~key, scales = 'free_x')
+}
+```
+
+```{r}
+analysis_model(data)
+```
+```{r}
+statistical_properties(data)
+```
+
+```{r}
+dataset_distribution(data)
+```
+
