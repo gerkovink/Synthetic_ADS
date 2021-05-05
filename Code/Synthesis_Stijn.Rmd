@@ -1,0 +1,83 @@
+---
+title: "Synthesis"
+author: "Stijn van den Broek"
+date: "02/05/2021"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(magrittr)
+library(mice)
+library(furrr)
+library(purrr)
+library(broom.mixed)
+```
+
+```{r}
+data = read.csv('diabetes.csv')
+data[,'Outcome'] = factor(data[,'Outcome'])
+```
+
+```{r}
+cart = rep("cart", ncol(data))
+names(cart) = colnames(data)
+
+custom_method = c("cart", "pmm", "pmm", "pmm", "cart", "pmm", "cart", "cart", "logreg")
+names(custom_method) = colnames(data)
+
+
+synthesize = function(dataframe, method = custom_method, nsim = 100) {
+  method = method
+  predict <- make.predictorMatrix(dataframe)
+  syn = future_map(1:nsim, ~ { 
+  dataframe %>% mice(m=5,
+                    method = method,
+                    predictorMatrix = predict,
+                    where=matrix(TRUE, nrow(dataframe), ncol(dataframe)),
+                    print=FALSE)
+  }, .options=future_options(seed=as.integer(123)), .progress=T, .id = "syn")
+  
+  return(syn)
+}
+```
+
+```{r}
+pool3.syn = function(mira) {
+  
+  if(class(mira)[1] == "mira") { # if the input object is of class mira
+    fitlist <- mira %$% analyses # extract the analyses from the mira object
+  }
+  else {
+    fitlist <- mira              # and otherwise, just take the input list
+  }
+  
+  m <- length(fitlist)           # number of imputations
+  
+  pooled <- fitlist %>% 
+    map_dfr(broom::tidy) %>%
+    group_by(term) %>%
+    summarise(est     = mean(estimate),
+              bm      = sum((estimate - est)^2) / (m - 1),
+              ubar    = mean(std.error^2),
+              var     = ubar + bm/m, # new variance estimate
+              df      = (m - 1) * (1 + (ubar * m)/bm), # and new df estimate
+              lower   = est - qt(.975, df) * sqrt(var),
+              upper   = est + qt(.975, df) * sqrt(var), .groups = 'drop')
+  
+  return(pooled)
+}
+```
+
+```{r}
+synthesized = synthesize(data, nsim = 10)
+```
+
+```{r}
+pooled = map_dfr(synthesized, function(x) {
+  x %$%
+  glm(Outcome ~ Pregnancies + Glucose + BMI, family = 'binomial') %>%
+  pool3.syn()
+})
+```
