@@ -167,6 +167,11 @@ pool3.syn <- function(mira) {
   pooled
 }
 
+pool3.syn(syn_ds) 
+pool3.syn(syn_cart)
+# this gives ERROR; no tidy method for objects of class mids
+
+
 map_dfr(syn_ds, function(x) {
   x %$%
     glm(Outcome ~ Pregnancies + Glucose + BMI, family = binomial) %>% 
@@ -188,12 +193,13 @@ syn_pooled <- map_dfr(syn_ds, function(x) {
 })
 
 
-pool3.syn(syn_ds)
-
-pool3.syn(syn_cart)
 
 
-## does not work yet 
+
+
+
+
+## FOR LATER; does not work yet 
 # get output
 syn_out <- syn_pooled %>%
   map(function(x) summary(x, population.inference = TRUE)) %>%
@@ -201,27 +207,6 @@ syn_out <- syn_pooled %>%
     coef(x) %>% 
       as.data.frame %>%
       rownames_to_column(var = "term")})
-
-syn_out
-
-
-
-
-#other stats properties function which includes the model 
-stat_properties_M<-function(x){ 
-  mu_preg<-mean(x$Pregnancies)
-  mu_gluc<-mean(x$Glucose)
-  mu_BMI<-mean(x$BMI)
-  var_preg <- var(x$Pregnancies)
-  var_gluc <- var(x$Glucose)
-  var_BMI <- var(x$BMI)
-  beta_preg <- glm(Outcome~Pregnancies+Glucose+BMI, data=x, family="binomial") %>% coefficients %>% .[2]
-  beta_gluc <- glm(Outcome~Pregnancies+Glucose+BMI, data=x, family="binomial") %>% coefficients %>% .[3]
-  beta_BMI <- glm(Outcome~Pregnancies+Glucose+BMI, data=x, family="binomial") %>% coefficients %>% .[4]
-  resvar <- beta_preg <- glm(Outcome~Pregnancies+Glucose+BMI, data=x, family="binomial") %>% residuals %>% var
-  R2 <- beta_preg <- glm(Outcome~Pregnancies+Glucose+BMI, data=x, family="binomial") %>% summary %>% .$r.squared
-  return(unlist(c(mu_preg,mu_gluc,mu_BMI,var_preg,var_gluc,var_BMI,beta_preg,beta_gluc,beta_BMI,resvar,R2)))
-}
 
 
 
