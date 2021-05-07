@@ -1,5 +1,5 @@
 #Mirthe Hendriks 
-# 5-5-2021
+# 7-5-2021
 
 library(mice) #imputations
 library(readr)
@@ -13,7 +13,6 @@ library(tidyr)
 library(tidyverse)
 library(purrr)
 
-library(broom.mixed) #pipe for mira? 
 
 #simulation  
 set.seed(123) #seed for reproducibility 
@@ -80,7 +79,6 @@ distributions <- function(x){
     facet_wrap(~key, scales = 'free_x')
 }
 
-?ggplot
 
 #plot the distributions of the observed data 
 distributions_model<-function(x){ 
@@ -104,7 +102,6 @@ meth <- make.method(truedata)
 meth <- rep("pmm",ncol(truedata))  
 names(meth) <- colnames(truedata)
 meth['Outcome'] <- "logreg"
-#meth['DiabetesPedigreeFunction'] <- "polr"
 
 #cart method, all variables are imputed by means of cart (classification and regression trees)
 cart <- rep("cart", ncol(truedata))
@@ -113,7 +110,7 @@ names(cart) <- colnames(truedata)
 #specify predictor matrix 
 pred <- make.predictorMatrix(truedata)
 
-#default synthetic datasets
+#default synthetic datasets; method specified as pmm and logreg for the binary outcome variable
 syn_ds <- future_map(1:nsim, ~ { 
   truedata %>% mice(m=5,
                     method = meth,
@@ -121,6 +118,7 @@ syn_ds <- future_map(1:nsim, ~ {
                     where=matrix(TRUE, nrow(truedata), ncol(truedata)),
                     print=FALSE)
 }, .options=future_options(seed=as.integer(123)), .progress=TRUE, .id = "syn")
+#set seed again in future_options to ensure reproducable results with parallel processing 
 
 syn_ds[1]
 
@@ -167,46 +165,55 @@ pool3.syn <- function(mira) {
   pooled
 }
 
-pool3.syn(syn_ds) 
-pool3.syn(syn_cart)
-# this gives ERROR; no tidy method for objects of class mids
+#pools the m=5 iterations for the 1000 simulations 
 
-
-map_dfr(syn_ds, function(x) {
+pooled_ds <- map_dfr(syn_ds, function(x) {
   x %$%
     glm(Outcome ~ Pregnancies + Glucose + BMI, family = binomial) %>% 
     pool3.syn()
 })
 
-# this outputs a tibble of 4000 x 8, so not really a pooled output yet 
+#outputs a tibble of 4000 x 8 with the pooled parameter estimates for the 1000 simulations;
+# an intercept and three regression coefficients (BMI, Glucose, Pregnancies)
 
-map_dfr(syn_cart, function(x) {
-  x %$%
-    glm(Outcome ~ Pregnancies + Glucose + BMI, family = binomial) %>% 
-    pool3.syn()
-})
-
-syn_pooled <- map_dfr(syn_ds, function(x) {
+pooled_cart <- map_dfr(syn_cart, function(x) {
   x %$%
     glm(Outcome ~ Pregnancies + Glucose + BMI, family = binomial) %>% 
     pool3.syn()
 })
 
 
+#compute confidence interval coverage 
+ci_cov <- function(pooled, true_fit = NULL, coefs = NULL, vars = NULL) {
+  
+  if (!is.null(true_fit)) {
+    coefs <- coef(true_fit)
+    vars   <- diag(vcov(true_fit))
+  }
+ 
+  nsim <- nrow(pooled) / length(coefs)
+  
+  pooled %>% mutate(true_coef = rep(coefs, nsim),
+                    true_var  = rep(vars, nsim),
+                    cover     = lower < true_coef & true_coef < upper) %>%
+    group_by(term) %>%
+    summarise("True Est" = unique(true_coef),
+              "Syn Est"  = mean(est),
+              "Bias"     = mean(est - true_coef),
+              "True SE"  = unique(sqrt(true_var)),
+              "Syn SE"   = mean(sqrt(var)),
+              "df"       = mean(df),
+              "Lower"    = mean(lower),
+              "Upper"    = mean(upper),
+              "CIW"      = mean(upper - lower),
+              "Coverage" = mean(cover), .groups = "drop")
+}
 
+view(ci_cov(pooled_ds, true_fit = model_true))
+#output coverage; 0,0,0,1 
+view(ci_cov(pooled_cart, true_fit = model_true))
+#output coverage 0.091, 0, 0.051, 1.000
 
-
-
-
-
-## FOR LATER; does not work yet 
-# get output
-syn_out <- syn_pooled %>%
-  map(function(x) summary(x, population.inference = TRUE)) %>%
-  map_dfr(function(x) {
-    coef(x) %>% 
-      as.data.frame %>%
-      rownames_to_column(var = "term")})
 
 
 
