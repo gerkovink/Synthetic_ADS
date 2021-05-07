@@ -15,10 +15,14 @@ library(purrr)
 library(broom.mixed)
 ```
 
+## Reading the data
+
 ```{r}
 data = read.csv('diabetes.csv')
 data[,'Outcome'] = factor(data[,'Outcome'])
 ```
+
+## Synthesizing function and imputation methods
 
 ```{r}
 cart = rep("cart", ncol(data))
@@ -28,11 +32,11 @@ custom_method = c("cart", "pmm", "pmm", "pmm", "cart", "pmm", "cart", "cart", "l
 names(custom_method) = colnames(data)
 
 
-synthesize = function(dataframe, method = custom_method, nsim = 100) {
+synthesize = function(dataframe, method = custom_method, m = 5, nsim = 100) {
   method = method
   predict <- make.predictorMatrix(dataframe)
   syn = future_map(1:nsim, ~ { 
-  dataframe %>% mice(m=5,
+  dataframe %>% mice(m=m,
                     method = method,
                     predictorMatrix = predict,
                     where=matrix(TRUE, nrow(dataframe), ncol(dataframe)),
@@ -42,6 +46,8 @@ synthesize = function(dataframe, method = custom_method, nsim = 100) {
   return(syn)
 }
 ```
+
+## Pooling function
 
 ```{r}
 pool3.syn = function(mira) {
@@ -70,14 +76,58 @@ pool3.syn = function(mira) {
 }
 ```
 
+## Confidence interval function
+
+```{r}
+ci_cov = function(pooled, true_fit = NULL, coefs = NULL, vars = NULL) {
+  
+  if (!is.null(true_fit)) {
+    coefs = coef(true_fit)
+    vars = diag(vcov(true_fit))
+  }
+  
+  nsim = nrow(pooled) / length(coefs)
+  
+  pooled %>% mutate(true_coef = rep(coefs, nsim),
+                    true_var  = rep(vars, nsim),
+                    cover     = lower < true_coef & true_coef < upper) %>%
+    group_by(term) %>%
+    summarise("True Est" = unique(true_coef),
+              "Syn Est"  = mean(est),
+              "Bias"     = mean(est - true_coef),
+              "True SE"  = unique(sqrt(true_var)),
+              "Syn SE"   = mean(sqrt(var)),
+              "df"       = mean(df),
+              "Lower"    = mean(lower),
+              "Upper"    = mean(upper),
+              "CIW"      = mean(upper - lower),
+              "Coverage" = mean(cover), .groups = "drop")
+}
+```
+
+## 5a. Synthesizing the data
+
 ```{r}
 synthesized = synthesize(data, nsim = 10)
 ```
 
+## 5c. Running the analysis model on each of the synthetic sets
+
+```{r}
+synthetic_analysis = analysis_model(data = synthesized, print = FALSE, synthetic = TRUE) #function is found in Analysis_Stijn.rmd
+```
+
+## 5g. Pooling the model parameters over the sets and recording the accuracy
 ```{r}
 pooled = map_dfr(synthesized, function(x) {
   x %$%
-  glm(Outcome ~ Pregnancies + Glucose + BMI, family = 'binomial') %>%
+  glm(Outcome ~ Pregnancies + Glucose, family = 'binomial') %>%
   pool3.syn()
 })
+```
+
+## 6??
+```{r}
+true_model = glm(Outcome~Pregnancies+Glucose, data = data, family = "binomial")
+confidence_interval = ci_cov(pooled, true_fit = true_model)
 ```
