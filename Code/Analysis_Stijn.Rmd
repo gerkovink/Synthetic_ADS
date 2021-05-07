@@ -16,13 +16,52 @@ data = read.csv('diabetes.csv')
 ```
 
 ```{r}
-analysis_model = function(dataframe) {
-  model = glm(Outcome~Pregnancies+Glucose, data = dataframe, family = "binomial")
-  print(summary(model))
+analysis_model = function(data, model, print = FALSE, synthetic = FALSE) {
+  
+  analyse_dataframe = function(dataframe, printing = print) {
+    coefficient_row = rep(NA, 0)
+    for (i in seq(1, nrow(tidy(model)), 1)) {
+      row = tidy(model)[i,]
+      names(row) = paste0(row$term, '_', names(row))
+      row = row[-1]
+      coefficient_row = c(coefficient_row, row)
+    }
+    if (printing == TRUE){
+      print(summary(model))
+    }
+    return(coefficient_row)
+  }
+  
+  if (synthetic == TRUE) {
+    coefficient_dataframe = data.frame()
+    nsim = 1
+    for (i in dataframe) {
+      m = 1
+      for (n in i) {
+        coefficient_row = analyse_dataframe(n)
+        coefficient_row = coefficient_row %>% 
+          c(nsim) %>% 
+          c(m) %>% 
+          data.frame()
+        names(coefficient_row)[(ncol(coefficient_row)-1)] = "nsim"
+        names(coefficient_row)[ncol(coefficient_row)] = "m"
+        coefficient_dataframe = rbind(coefficient_dataframe, coefficient_row)
+        m = m+1
+      }
+      i = i+1
+    }
+  }
+  
+  else {
+    coefficient_dataframe = data.frame(analyse_dataframe(data))
+  }
+  
+  return(coefficient_dataframe)
 }
 ```
 
 ```{r}
+#Dataframe maken waarbij de statistical properties worden opgeslagen van elke m van elke sim.
 statistical_properties = function(dataframe) {
   print(apply(dataframe, 2, mean))
   print(apply(dataframe, 2, var))
@@ -39,8 +78,10 @@ dataset_distribution = function(dataframe) {
 ```
 
 ```{r}
-analysis_model(data)
+model = glm(Outcome~Pregnancies+Glucose, data = data, family = "binomial")
+analysis = analysis_model(data, model = model, print = FALSE)
 ```
+
 ```{r}
 statistical_properties(data)
 ```
@@ -48,4 +89,3 @@ statistical_properties(data)
 ```{r}
 dataset_distribution(data)
 ```
-
