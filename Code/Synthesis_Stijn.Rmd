@@ -12,7 +12,8 @@ library(magrittr)
 library(mice)
 library(furrr)
 library(purrr)
-library(broom.mixed)
+library(broom)
+library(caret)
 ```
 
 ## Reading the data
@@ -20,6 +21,12 @@ library(broom.mixed)
 ```{r}
 data = read.csv('diabetes.csv')
 data[,'Outcome'] = factor(data[,'Outcome'])
+```
+
+## Setting the seed
+
+```{r}
+set.seed(123)
 ```
 
 ## Synthesizing function and imputation methods
@@ -105,6 +112,23 @@ ci_cov = function(pooled, true_fit = NULL, coefs = NULL, vars = NULL) {
 }
 ```
 
+## Prediction function
+
+```{r}
+predict_synth_or_true = function(data, model) {
+  set.seed(123) #for reproducibility
+  predicted_values = predict(object = model, newdata = data)
+  predicted_values[predicted_values<0.5] = 0
+  predicted_values[predicted_values>=0.5] = 1
+  predicted_values = predicted_values
+  true_values = data[,ncol(data)]
+  
+  result = data.frame(true_value = factor(true_values, levels = c(0, 1)), predicted_value = factor(predicted_values, levels = c(0, 1)))
+
+  return(result)
+}
+```
+
 ## 5a. Synthesizing the data
 
 ```{r}
@@ -117,7 +141,34 @@ synthesized = synthesize(data, nsim = 10)
 synthetic_analysis = analysis_model(data = synthesized, print = FALSE, synthetic = TRUE) #function is found in Analysis_Stijn.rmd
 ```
 
+## 5f. Run a prediction model that predicts syn or true
+
+```{r}
+#preparing data for prediction
+total_result = data.frame()
+for (i in seq(1, length(synthesized), 1)) {
+  imputation = synthesized[[i]]
+  for (n in seq(1, imputation$m, 1)) {
+    syndata = complete(imputation, action = n)
+    true_data_index = sample(c(1:nrow(data)), size = (nrow(data)*0.5))
+    true_data = data[true_data_index, 1:ncol(data)]
+    true_data$Synth_or_true = 1
+    synthetic_data_index = sample(c(1:nrow(syndata)), size = (nrow(syndata)*0.5))
+    synthetic_data = syndata[synthetic_data_index, 1:ncol(syndata)]
+    synthetic_data$Synth_or_true = 0
+    prediction_data = rbind(true_data, synthetic_data)
+    prediction_model = glm(Synth_or_true~Pregnancies+Glucose+BloodPressure+SkinThickness+Insulin+BMI+DiabetesPedigreeFunction+Age+Outcome, data = prediction_data, family = "binomial")
+    result = predict_synth_or_true(prediction_data, prediction_model)
+    total_result = rbind(total_result, result)
+  }
+}
+
+cfmatrix = confusionMatrix(total_result$predicted_value, total_result$true_value)
+cfmatrix
+```
+
 ## 5g. Pooling the model parameters over the sets and recording the accuracy
+
 ```{r}
 pooled = map_dfr(synthesized, function(x) {
   x %$%
@@ -126,7 +177,8 @@ pooled = map_dfr(synthesized, function(x) {
 })
 ```
 
-## 6??
+## 6e. Calculating the 95% coverage rates of the parameters
+
 ```{r}
 true_model = glm(Outcome~Pregnancies+Glucose, data = data, family = "binomial")
 confidence_interval = ci_cov(pooled, true_fit = true_model)
