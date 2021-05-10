@@ -165,7 +165,8 @@ for (i in seq(1, length(synthesized), 1)) { #looping through each simulation
 }
 
 cfmatrix = confusionMatrix(total_result$predicted_value, total_result$true_value) #creating a confusion matrix
-cfmatrix
+print(cfmatrix)
+print(summary(prediction_model))
 ```
 
 ## 5g. Pooling the model parameters over the sets and recording the accuracy
