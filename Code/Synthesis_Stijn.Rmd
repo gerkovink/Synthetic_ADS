@@ -144,26 +144,25 @@ synthetic_analysis = analysis_model(data = synthesized, print = FALSE, synthetic
 ## 5f. Run a prediction model that predicts syn or true
 
 ```{r}
-#preparing data for prediction
-total_result = data.frame()
-for (i in seq(1, length(synthesized), 1)) {
+total_result = data.frame() #data frame in which the results of all sampled data will be stored
+for (i in seq(1, length(synthesized), 1)) { #looping through each simulation
   imputation = synthesized[[i]]
-  for (n in seq(1, imputation$m, 1)) {
+  for (n in seq(1, imputation$m, 1)) { #looping through each imputation of the simulation
     syndata = complete(imputation, action = n)
-    true_data_index = sample(c(1:nrow(data)), size = (nrow(data)*0.5))
-    true_data = data[true_data_index, 1:ncol(data)]
-    true_data$Synth_or_true = 1
-    synthetic_data_index = sample(c(1:nrow(syndata)), size = (nrow(syndata)*0.5))
-    synthetic_data = syndata[synthetic_data_index, 1:ncol(syndata)]
-    synthetic_data$Synth_or_true = 0
-    prediction_data = rbind(true_data, synthetic_data)
-    prediction_model = glm(Synth_or_true~Pregnancies+Glucose+BloodPressure+SkinThickness+Insulin+BMI+DiabetesPedigreeFunction+Age+Outcome, data = prediction_data, family = "binomial")
-    result = predict_synth_or_true(prediction_data, prediction_model)
-    total_result = rbind(total_result, result)
+    true_data_index = sample(c(1:nrow(data)), size = (nrow(data)*0.5)) #sampling half of the index values of the original data
+    true_data = data[true_data_index, 1:ncol(data)] #using the index values to get the rows of the corresponding indices
+    true_data$Synth_or_true = 1 #setting the true data to 1
+    synthetic_data_index = sample(c(1:nrow(syndata)), size = (nrow(syndata)*0.5)) #sampling half of the index values of the imputed data
+    synthetic_data = syndata[synthetic_data_index, 1:ncol(syndata)] #using the index values to get the rows of the corresponding indices
+    synthetic_data$Synth_or_true = 0 #setting the synthetic data to 0
+    prediction_data = rbind(true_data, synthetic_data) #combining the two samples into a single data set
+    prediction_model = glm(Synth_or_true~Pregnancies+Glucose+BloodPressure+SkinThickness+Insulin+BMI+DiabetesPedigreeFunction+Age+Outcome, data = prediction_data, family = "binomial") #setting up a prediction model that includes all variables
+    result = predict_synth_or_true(prediction_data, prediction_model) #using the prediction function to get a data frame of true and predicted values
+    total_result = rbind(total_result, result) #appending the data frame to the overarching data frame
   }
 }
 
-cfmatrix = confusionMatrix(total_result$predicted_value, total_result$true_value)
+cfmatrix = confusionMatrix(total_result$predicted_value, total_result$true_value) #creating a confusion matrix
 cfmatrix
 ```
 
