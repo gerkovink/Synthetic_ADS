@@ -118,9 +118,9 @@ ci_cov = function(pooled, true_fit = NULL, coefs = NULL, vars = NULL) {
 predict_synth_or_true = function(data, model) {
   set.seed(123) #for reproducibility
   predicted_values = predict(object = model, newdata = data)
+  print(predicted_values)
   predicted_values[predicted_values<0.5] = 0
   predicted_values[predicted_values>=0.5] = 1
-  predicted_values = predicted_values
   true_values = data[,ncol(data)]
   
   result = data.frame(true_value = factor(true_values, levels = c(0, 1)), predicted_value = factor(predicted_values, levels = c(0, 1)))
