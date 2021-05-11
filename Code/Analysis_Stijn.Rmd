@@ -9,12 +9,19 @@ output: html_document
 library(ggplot2)
 library(tidyverse)
 library(corrplot)
+library(broom)
 ```
 
 ## Reading the data
 
 ```{r}
 data = read.csv('diabetes.csv')
+```
+
+## Setting the seed
+
+```{r}
+set.seed(123)
 ```
 
 ## 1. formulating an analysis model
@@ -46,7 +53,7 @@ analysis_model = function(data, print = FALSE, synthetic = FALSE) {
       imputations = data[[x]]
       for (n in seq(1, imputations$m, 1)) {
         synth_data = complete(imputations, action = n)
-        synthetic_model = glm(Outcome~Pregnancies+Glucose, data = synth_data, family = "binomial") #very clunky implementation, but it works for now.
+        synthetic_model = glm(Outcome~Pregnancies+Glucose+BloodPressure+SkinThickness+Insulin+BMI+DiabetesPedigreeFunction+Age, data = synth_data, family = "binomial") #very clunky implementation, but it works for now.
         synthetic_coefficients = analyse_dataframe(synthetic_model)
         synthetic_coefficients = synthetic_coefficients %>% 
           c(nsim) %>% 
@@ -54,6 +61,7 @@ analysis_model = function(data, print = FALSE, synthetic = FALSE) {
           data.frame()
         names(synthetic_coefficients)[(ncol(synthetic_coefficients)-1)] = "nsim"
         names(synthetic_coefficients)[ncol(synthetic_coefficients)] = "m"
+        synthetic_coefficients = cbind(synthetic_coefficients, statistical_properties(synth_data, print = FALSE)) #adding the statistical properties of the data
         coefficient_dataframe = rbind(coefficient_dataframe, synthetic_coefficients)
         m = m+1
       }
@@ -62,8 +70,9 @@ analysis_model = function(data, print = FALSE, synthetic = FALSE) {
   }
   
   else {
-    model = glm(Outcome~Pregnancies+Glucose, data = data, family = "binomial") #also clunky.
+    model = glm(Outcome~Pregnancies+Glucose+BloodPressure+SkinThickness+Insulin+BMI+DiabetesPedigreeFunction+Age, data = data, family = "binomial") #also clunky.
     coefficient_dataframe = data.frame(analyse_dataframe(model))
+    coefficient_dataframe = cbind(coefficient_dataframe, statistical_properties(data, print = FALSE)) #adding the statistical properties of the data
   }
   
   return(coefficient_dataframe)
@@ -73,20 +82,62 @@ analysis_model = function(data, print = FALSE, synthetic = FALSE) {
 ## Function for obtaining statistical properties
 
 ```{r}
-#Dataframe maken waarbij de statistical properties worden opgeslagen van elke m van elke sim.
-statistical_properties = function(dataframe) {
-  print(apply(dataframe, 2, mean))
-  print(apply(dataframe, 2, var))
-  print(corrplot(cor(dataframe), method = "color"))
+statistical_properties = function(dataframe, print = TRUE) {
+  
+  make_wide_columns = function(list, statistic) {
+    statistic_columns = data.frame(placeholder = NA)
+    for (i in seq(1, length(list), 1)) {
+      column_name = paste0(names(list)[i], '_', statistic)
+      value = list[i]
+      single_column = data.frame(placeholder = value)
+      colnames(single_column) = column_name
+      statistic_columns = cbind(statistic_columns, single_column)
+    }
+    
+    statistic_columns = statistic_columns[,-1]
+    return(statistic_columns)
+  }
+  
+  mean = lapply(dataframe, mean, na.rm = TRUE)
+  variance = apply(dataframe, 2, var)
+  standard_deviation = apply(dataframe, 2, sd)
+  
+  if (print == TRUE) {
+    print(corrplot(cor(dataframe), method = "color"))
+  }
+  
+  meancols = make_wide_columns(mean, "mean")
+  varcols = make_wide_columns(variance, "var")
+  sdcols = make_wide_columns(standard_deviation, "sd")
+  
+  statistics = cbind(meancols, varcols, sdcols)
+  
+  return(statistics)
+}
+```
+
+```{r}
+make_wide_columns = function(list, statistic) {
+  statistic_columns = data.frame(placeholder = NA)
+  for (i in seq(1, length(list), 1)) {
+    column_name = paste0(names(list)[i], '_', statistic)
+    value = list[i]
+    single_column = data.frame(placeholder = value)
+    colnames(single_column) = column_name
+    statistic_columns = cbind(statistic_columns, single_column)
+  }
+  
+  statistic_columns = statistic_columns[,-1]
+  return(statistic_columns)
 }
 ```
 
 ## Function for plotting distributions
 
 ```{r}
-dataset_distribution = function(dataframe) {
+dataset_distribution = function(dataframe, bins = 20) {
   ggplot(gather(dataframe), aes(value)) + 
-    geom_histogram(bins = 10) + 
+    geom_histogram(bins = bins) + 
     facet_wrap(~key, scales = 'free_x')
 }
 ```
@@ -100,7 +151,7 @@ analysis = analysis_model(data = data, print = FALSE, synthetic = FALSE)
 ## 3. Obtaining the statistical properties of the true data set
 
 ```{r}
-statistical_properties(data)
+true_statistics = statistical_properties(data)
 ```
 
 ## 4. Plotting the distributions of the true data set
