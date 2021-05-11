@@ -5,7 +5,7 @@ date: "02/05/2021"
 output: html_document
 ---
 
-```{r}
+```{r, results='hide', message=FALSE, warning=FALSE}
 library(ggplot2)
 library(tidyverse)
 library(magrittr)
@@ -22,7 +22,6 @@ library(mboost)
 
 ```{r}
 data = read.csv('diabetes.csv')
-data$Outcome = factor(data$Outcome, levels = c(0, 1))
 ```
 
 ## Setting the seed
@@ -151,6 +150,10 @@ true_statistics = statistical_properties(data)
 dataset_distribution(data)
 ```
 
+```{r}
+data$Outcome = factor(data$Outcome, levels = c(0, 1))
+```
+
 ## Synthesizing function and imputation methods
 
 ```{r}
@@ -249,13 +252,13 @@ predict_synth_or_true = function(data, model) {
 
 ## 5a. Synthesizing the data
 
-```{r}
+```{r, warning=FALSE}
 synthesized = synthesize(data, nsim = 10)
 ```
 
 ## 5b, 5c & 5d. Calculating the statistical properties, running the analysis model on each of the synthetic sets & combining the statistics and parameters into single inferences
 
-```{r}
+```{r, warning=FALSE}
 synthetic_analysis = analysis_model(data = synthesized, print = FALSE, synthetic = TRUE)
 ```
 
@@ -307,3 +310,17 @@ pooled = map_dfr(synthesized, function(x) {
 true_model = glm(Outcome~Pregnancies+Glucose+BloodPressure+SkinThickness+Insulin+BMI+DiabetesPedigreeFunction+Age, data = data, family = "binomial")
 confidence_interval = ci_cov(pooled, true_fit = true_model)
 ```
+
+## 6a. Calculating the average parameters and statistics over the simulations
+
+```{r}
+average = apply(synthetic_analysis, 2, mean)
+print(average)
+```
+
+## 6b. Plotting the distributions of the statistics and parameters
+
+```{r}
+dataset_distribution(synthetic_analysis) #needs to be changed to boxplots and have the true data as reference
+```
+
