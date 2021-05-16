@@ -171,8 +171,10 @@ synthesize = function(dataframe, method = custom_method, m = 5, nsim = 100) {
   dataframe %>% mice(m=m,
                     method = method,
                     predictorMatrix = predict,
-                    where=matrix(TRUE, nrow(dataframe), ncol(dataframe)),
-                    print=FALSE)
+                    where = matrix(TRUE, nrow(dataframe), ncol(dataframe)),
+                    cp = 1e-32,
+                    minbucket = 3,
+                    print = FALSE)
   }, .options=future_options(seed=as.integer(123)), .progress=T, .id = "syn")
   
   return(syn)
@@ -182,7 +184,7 @@ synthesize = function(dataframe, method = custom_method, m = 5, nsim = 100) {
 ## Pooling function
 
 ```{r}
-pool3.syn = function(mira) {
+pool3.syn <- function(mira) {
   
   if(class(mira)[1] == "mira") { # if the input object is of class mira
     fitlist <- mira %$% analyses # extract the analyses from the mira object
@@ -190,6 +192,8 @@ pool3.syn = function(mira) {
   else {
     fitlist <- mira              # and otherwise, just take the input list
   }
+  
+  vars <- fitlist[[1]] %>% coef() %>% names()
   
   m <- length(fitlist)           # number of imputations
   
@@ -202,26 +206,26 @@ pool3.syn = function(mira) {
               var     = ubar + bm/m, # new variance estimate
               df      = (m - 1) * (1 + (ubar * m)/bm), # and new df estimate
               lower   = est - qt(.975, df) * sqrt(var),
-              upper   = est + qt(.975, df) * sqrt(var), .groups = 'drop')
-  
-  return(pooled)
+              upper   = est + qt(.975, df) * sqrt(var), .groups = 'drop') %>%
+    arrange(factor(term, levels = vars))
+  pooled
 }
 ```
 
 ## Confidence interval function
 
 ```{r}
-ci_cov = function(pooled, true_fit = NULL, coefs = NULL, vars = NULL) {
+ci_cov <- function(pooled, true_fit = NULL, coefs = NULL, vars = NULL) {
   
   if (!is.null(true_fit)) {
-    coefs = coef(true_fit)
-    vars = diag(vcov(true_fit))
+    coefs <- coef(true_fit)
+    vars   <- diag(vcov(true_fit))
   }
   
-  nsim = nrow(pooled) / length(coefs)
+  nsim <- nrow(pooled) / length(unique(pooled$term))
   
-  pooled %>% mutate(true_coef = rep(coefs, nsim),
-                    true_var  = rep(vars, nsim),
+  pooled %>% mutate(true_coef = rep(coefs, times = nsim),
+                    true_var  = rep(vars, times = nsim),
                     cover     = lower < true_coef & true_coef < upper) %>%
     group_by(term) %>%
     summarise("True Est" = unique(true_coef),
@@ -253,7 +257,7 @@ predict_synth_or_true = function(data, model) {
 ## 5a. Synthesizing the data
 
 ```{r, warning=FALSE}
-synthesized = synthesize(data, nsim = 10)
+synthesized = synthesize(data, method = cart, nsim = 10)
 ```
 
 ## 5b, 5c & 5d. Calculating the statistical properties, running the analysis model on each of the synthetic sets & combining the statistics and parameters into single inferences
