@@ -16,12 +16,14 @@ library(purrr)
 library(broom)
 library(caret)
 library(mboost)
+library(e1071)
 ```
 
 ## Reading the data
 
 ```{r}
 data = read.csv('diabetes.csv')
+data$Outcome = factor(data$Outcome, levels = c(0, 1))
 ```
 
 ## Setting the seed
@@ -30,95 +32,27 @@ data = read.csv('diabetes.csv')
 set.seed(123)
 ```
 
-## 1. formulating an analysis model
+# Functions
 
-```{r}
-analysis_model = function(data, print = FALSE, synthetic = FALSE) {
-
-  analyse_dataframe = function(model) { #function for getting the coefficients of the data in a list
-    coefficient_row = rep(NA, 0)
-    for (i in seq(1, nrow(tidy(model)), 1)) {
-      row = tidy(model)[i,]
-      names(row) = paste0(row$term, '_', names(row))
-      row = row[-1]
-      coefficient_row = c(coefficient_row, row)
-    }
-   
-    if (print == TRUE) {
-      print(summary(model))
-    }
-    
-    return(coefficient_row)
-  }
-
-  if (synthetic == TRUE) {
-    coefficient_dataframe = data.frame()
-    nsim = 1
-    for (x in seq(1, length(data), 1)) {
-      m = 1
-      imputations = data[[x]]
-      for (n in seq(1, imputations$m, 1)) {
-        synth_data = complete(imputations, action = n)
-        synthetic_model = glm(Outcome~Pregnancies+Glucose+BloodPressure+SkinThickness+Insulin+BMI+DiabetesPedigreeFunction+Age, data = synth_data, family = "binomial") #very clunky implementation, but it works for now.
-        synthetic_coefficients = analyse_dataframe(synthetic_model)
-        synthetic_coefficients = synthetic_coefficients %>% 
-          c(nsim) %>% 
-          c(m) %>% 
-          data.frame()
-        names(synthetic_coefficients)[(ncol(synthetic_coefficients)-1)] = "nsim"
-        names(synthetic_coefficients)[ncol(synthetic_coefficients)] = "m"
-        synthetic_coefficients = cbind(synthetic_coefficients, statistical_properties(synth_data, print = FALSE)) #adding the statistical properties of the data
-        coefficient_dataframe = rbind(coefficient_dataframe, synthetic_coefficients)
-        m = m+1
-      }
-      nsim = nsim+1
-    }
-  }
-  
-  else {
-    model = glm(Outcome~Pregnancies+Glucose+BloodPressure+SkinThickness+Insulin+BMI+DiabetesPedigreeFunction+Age, data = data, family = "binomial") #also clunky.
-    coefficient_dataframe = data.frame(analyse_dataframe(model))
-    coefficient_dataframe = cbind(coefficient_dataframe, statistical_properties(data, print = FALSE)) #adding the statistical properties of the data
-  }
-  
-  return(coefficient_dataframe)
-}
-```
+The following functions are used throughout the document.
 
 ## Function for obtaining statistical properties
 
 ```{r}
-statistical_properties = function(dataframe, print = TRUE) {
-  
-  make_wide_columns = function(list, statistic) {
-    statistic_columns = data.frame(placeholder = NA)
-    for (i in seq(1, length(list), 1)) {
-      column_name = paste0(names(list)[i], '_', statistic)
-      value = list[i]
-      single_column = data.frame(placeholder = value)
-      colnames(single_column) = column_name
-      statistic_columns = cbind(statistic_columns, single_column)
-    }
-    
-    statistic_columns = statistic_columns[,-1]
-    return(statistic_columns)
+statistical_properties = function(dataframe){
+  stats = data.frame()
+  for (i in seq(1, length(colnames(dataframe)), 1)) {
+    column_data = as.numeric(dataframe[,i])
+    term = colnames(dataframe)[i]
+    mean = mean(column_data)
+    standard_deviation = sd(column_data)
+    skewness = skewness(column_data)
+    kurtosis = kurtosis(column_data)
+    standard_error = sd(column_data)/sqrt(length(column_data))
+    row = data.frame(term = term, mean = mean, standard_deviation = standard_deviation, skewness = skewness, kurtosis = kurtosis, standard_error = standard_error)
+    stats = rbind(stats, row)
   }
-  
-  mean = lapply(dataframe, mean, na.rm = TRUE)
-  variance = apply(dataframe, 2, var)
-  standard_deviation = apply(dataframe, 2, sd)
-  
-  if (print == TRUE) {
-    print(corrplot(cor(dataframe), method = "color"))
-  }
-  
-  meancols = make_wide_columns(mean, "mean")
-  varcols = make_wide_columns(variance, "var")
-  sdcols = make_wide_columns(standard_deviation, "sd")
-  
-  statistics = cbind(meancols, varcols, sdcols)
-  
-  return(statistics)
+  return(stats)
 }
 ```
 
@@ -130,28 +64,6 @@ dataset_distribution = function(dataframe, bins = 20) {
     geom_histogram(bins = bins) + 
     facet_wrap(~key, scales = 'free_x')
 }
-```
-
-## 2. Running the analysis model on the data set to obtain the true data inference
-
-```{r}
-analysis = analysis_model(data = data, print = FALSE, synthetic = FALSE)
-```
-
-## 3. Obtaining the statistical properties of the true data set
-
-```{r}
-true_statistics = statistical_properties(data)
-```
-
-## 4. Plotting the distributions of the true data set
-
-```{r}
-dataset_distribution(data)
-```
-
-```{r}
-data$Outcome = factor(data$Outcome, levels = c(0, 1))
 ```
 
 ## Synthesizing function and imputation methods
@@ -172,7 +84,7 @@ synthesize = function(dataframe, method = custom_method, m = 5, nsim = 100) {
                     method = method,
                     predictorMatrix = predict,
                     where = matrix(TRUE, nrow(dataframe), ncol(dataframe)),
-                    cp = 1e-32,
+                    #cp = 1e-32,
                     minbucket = 3,
                     print = FALSE)
   }, .options=future_options(seed=as.integer(123)), .progress=T, .id = "syn")
@@ -216,6 +128,7 @@ pool3.syn <- function(mira) {
 
 ```{r}
 ci_cov <- function(pooled, true_fit = NULL, coefs = NULL, vars = NULL) {
+  set.seed(123)
   
   if (!is.null(true_fit)) {
     coefs <- coef(true_fit)
@@ -254,16 +167,89 @@ predict_synth_or_true = function(data, model) {
 }
 ```
 
+# The process of synthesizing
+
+These are the steps for synthesizing and analyzing the data.
+
+## 1. formulating an analysis model
+
+```{r}
+analysis_model = glm(Outcome~BMI+Glucose+Pregnancies, data = data, family = "binomial")
+```
+
+## 2. Running the analysis model on the data set to obtain the true data inference
+
+```{r}
+summary(analysis_model)
+```
+
+## 3. Obtaining the statistical properties of the true data set
+
+```{r}
+true_statistics = statistical_properties(data)
+```
+
+## 4. Plotting the distributions of the true data set
+
+```{r}
+dataset_distribution(data)
+```
+
 ## 5a. Synthesizing the data
 
 ```{r, warning=FALSE}
-synthesized = synthesize(data, method = cart, nsim = 10)
+synthesized = synthesize(data, method = cart, nsim = 100)
 ```
 
-## 5b, 5c & 5d. Calculating the statistical properties, running the analysis model on each of the synthetic sets & combining the statistics and parameters into single inferences
+## 5b. Calculating the statistical properties of the synthetic sets
 
 ```{r, warning=FALSE}
-synthetic_analysis = analysis_model(data = synthesized, print = FALSE, synthetic = TRUE)
+all_synthetic_statistics = data.frame()
+for (i in seq(1, length(synthesized), 1)) { #looping through each simulation
+  imputation = synthesized[[i]]
+  for (n in seq(1, imputation$m, 1)) { #looping through each imputation of the simulation
+    syndata = complete(imputation, action = n)
+    synthetic_statistics = statistical_properties(syndata)
+    
+    all_synthetic_statistics = rbind(all_synthetic_statistics, synthetic_statistics)
+  }
+}
+```
+
+## 5c. Running the analysis model on each of the synthetic sets
+
+```{r}
+all_synthetic_parameters = data.frame()
+for (i in seq(1, length(synthesized), 1)) { #looping through each simulation
+  imputation = synthesized[[i]]
+  for (n in seq(1, imputation$m, 1)) { #looping through each imputation of the simulation
+    syndata = complete(imputation, action = n)
+    synthetic_parameters = glm(Outcome~BMI+Glucose+Pregnancies, data = syndata, family = "binomial") %>% tidy()
+    all_synthetic_parameters = rbind(all_synthetic_parameters, synthetic_parameters)
+  }
+}
+```
+
+## 5d. Combining the statistics and parameters into single inferences
+
+```{r, warning=FALSE}
+single_synthetic_statistics = data.frame()
+for (i in seq(1, length(unique(all_synthetic_statistics$term)))) {
+  term_data = all_synthetic_statistics[all_synthetic_statistics$term == unique(all_synthetic_statistics$term)[i],] %>%
+    sapply(mean)
+  term_data$term = unique(all_synthetic_statistics$term)[i]
+  term_data = data.frame(term_data)
+  single_synthetic_statistics = rbind(single_synthetic_statistics, term_data)
+}
+
+single_synthetic_parameters = data.frame()
+for (i in seq(1, length(unique(all_synthetic_parameters$term)))) {
+  term_data = all_synthetic_parameters[all_synthetic_parameters$term == unique(all_synthetic_parameters$term)[i],] %>%
+    sapply(mean)
+  term_data$term = unique(all_synthetic_parameters$term)[i]
+  term_data = data.frame(term_data)
+  single_synthetic_parameters = rbind(single_synthetic_parameters, term_data)
+}
 ```
 
 ## 5e & 5f. Combining half of the imputed set randomly with half of the true set for each of the m imputed sets & running a prediction model that predicts syn or true
@@ -302,29 +288,43 @@ print(cfmatrix)
 print(prediction_model)
 ```
 
-## 5g. Pooling the model parameters over the sets and recording the accuracy
+## 5g. Pooling the model parameters
 
 ```{r}
 pooled = map_dfr(synthesized, function(x) {
   x %$%
-  glm(Outcome ~ Pregnancies+Glucose+BloodPressure+SkinThickness+Insulin+BMI+DiabetesPedigreeFunction+Age, family = 'binomial') %>%
+   glm(Outcome ~ BMI+Glucose+Pregnancies, family = 'binomial') %>%
   pool3.syn()
 })
-
-true_model = glm(Outcome~Pregnancies+Glucose+BloodPressure+SkinThickness+Insulin+BMI+DiabetesPedigreeFunction+Age, data = data, family = "binomial")
-confidence_interval = ci_cov(pooled, true_fit = true_model)
 ```
 
-## 6a. Calculating the average parameters and statistics over the simulations
+## 6a. Comparing the synthetic statistics and parameters with the true statistics and parameters
 
 ```{r}
-average = apply(synthetic_analysis, 2, mean)
-print(average)
+true_parameters = data.frame(tidy(analysis_model))
+statistics_difference = single_synthetic_statistics[,2:ncol(single_synthetic_statistics)] - true_statistics[,2:ncol(true_statistics)]
+parameters_difference = single_synthetic_parameters[,2:ncol(single_synthetic_parameters)] - true_parameters[,2:ncol(true_parameters)]
+statistics_difference$term = single_synthetic_statistics$term
+parameters_difference$term = single_synthetic_parameters$term
+statistics_difference = statistics_difference[,c(ncol(statistics_difference),1:(ncol(statistics_difference)-1))]
+parameters_difference = parameters_difference[,c(ncol(parameters_difference),1:(ncol(parameters_difference)-1))]
+
+print(statistics_difference)
+print(parameters_difference)
 ```
 
 ## 6b. Plotting the distributions of the statistics and parameters
 
 ```{r}
 dataset_distribution(synthetic_analysis) #needs to be changed to boxplots and have the true data as reference
+```
+
+## 6c. Calculating the confidence interval coverages
+
+```{r}
+true_data = glm(Outcome~BMI+Glucose+Pregnancies, data = data, family = "binomial")
+
+confidence_interval = ci_cov(pooled, true_fit = true_data)
+print(confidence_interval)
 ```
 
