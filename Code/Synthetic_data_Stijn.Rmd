@@ -2,7 +2,9 @@
 title: "Synthetic data"
 author: "Stijn van den Broek"
 date: "02/05/2021"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r, results='hide', message=FALSE, warning=FALSE}
@@ -60,7 +62,7 @@ statistical_properties = function(dataframe){
 
 ```{r}
 dataset_distribution = function(dataframe, bins = 20) {
-  ggplot(gather(dataframe), aes(value)) + 
+  ggplot(gather(dataframe), aes(as.numeric(value))) + 
     geom_histogram(bins = bins) + 
     facet_wrap(~key, scales = 'free_x')
 }
@@ -315,8 +317,18 @@ print(parameters_difference)
 
 ## 6b. Plotting the distributions of the statistics and parameters
 
-```{r}
-dataset_distribution(synthetic_analysis) #needs to be changed to boxplots and have the true data as reference
+```{r, warning=FALSE}
+repeat_distribution = function(dataframe) {
+  for (i in seq(1, length(unique(dataframe$term)), 1)) {
+    print(unique(dataframe$term)[i])
+    print(dataset_distribution(dataframe[dataframe$term == unique(dataframe$term)[i],]))
+  }
+}
+
+print("Statistics")
+repeat_distribution(all_synthetic_statistics)
+print("Parameters")
+repeat_distribution(all_synthetic_parameters)
 ```
 
 ## 6c. Calculating the confidence interval coverages
