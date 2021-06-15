@@ -21,6 +21,7 @@ library(mboost)
 library(e1071)
 library(xtable)
 library(DT)
+library(psych)
 ```
 
 ## Setting the seed
@@ -89,21 +90,28 @@ dataset_distribution = function(dataframe, bins = 20) {
 synthesize = function(dataframe, method = "cart", bootstrap = FALSE, m = 5, nsim = 100, maxit = 1, cp = 0.0001) {
   set.seed(123)
   if (bootstrap == TRUE){
-    dataframe = dataframe[sample(1:nrow(dataframe), nrow(dataframe), replace = TRUE), ]
+    syn <- future_map(1:nsim, function(x){
+                  mice(dataframe[sample(1:768, 768, replace = TRUE), ], 
+                          m=m, 
+                          meth = method, 
+                          where = matrix(TRUE, nrow(dataframe), ncol(dataframe)), 
+                          cp = cp,
+                          minbucket = 3,
+                          print = FALSE)}, 
+                  .options = furrr_options(seed = as.integer(123)), .progress = T)
   }
   
-  method = method
-  predict <- make.predictorMatrix(dataframe)
-  syn = future_map(1:nsim, ~ { 
-  dataframe %>% mice(m=m,
-                    maxit = maxit,
-                    method = method,
-                    predictorMatrix = predict,
-                    where = matrix(TRUE, nrow(dataframe), ncol(dataframe)),
-                    cp = cp,
-                    minbucket = 3,
-                    print = FALSE)
-  }, .options=future_options(seed=as.integer(123)), .progress=T, .id = "syn")
+  else {
+    syn <- future_map(1:nsim, function(x){
+                  mice(dataframe, 
+                          m=m, 
+                          meth = method, 
+                          where = matrix(TRUE, nrow(dataframe), ncol(dataframe)), 
+                          cp = cp,
+                          minbucket = 3,
+                          print = FALSE)}, 
+                  .options = furrr_options(seed = as.integer(123)), .progress = T)
+  }
   
   return(syn)
 }
@@ -505,6 +513,8 @@ print("Statistics")
 repeat_distribution(all_synthetic_statistics)
 print("Parameters")
 repeat_distribution(all_synthetic_parameters)
+print("Pooling parameters")
+repeat_distribution(pooled)
 ```
 
 ## 6c. Calculating the confidence interval coverages
@@ -548,26 +558,50 @@ confidence_interval12norm = ci_cov(pooled12norm, true_fit = true_data_imputed)
 # print(xtable(confidence_interval11[,c(1, 4, 8:11)]))
 # print(xtable(confidence_interval12[,c(1, 4, 8:11)]))
 ```
+
 ```{r}
+print("The standard synthesis with original data, no bootstrap and a 1e-4 cp")
 print(confidence_interval[,c(1, 4, 8:11)])
+print("Synthesis with original data, no bootstrap and a 1e-32 cp")
 print(confidence_interval2[,c(1, 4, 8:11)])
+print("Synthesis with original data, bootstrap, 1 iteration and a 1e-4 cp")
 print(confidence_interval3[,c(1, 4, 8:11)])
+print("Synthesis with original data, bootstrap, 1 iteration and a 1e-32 cp")
 print(confidence_interval4[,c(1, 4, 8:11)])
+print("synthesis with original data, bootstrap, 5 iterations and a 1e-4 cp")
 print(confidence_interval5[,c(1, 4, 8:11)])
+print("synthesis with original data, bootstrap, 5 iterations and a 1e-32 cp")
 print(confidence_interval6[,c(1, 4, 8:11)])
+
+print("Synthesis with original data, bootstrap, 1 iteration and a 1e-4 cp with pool.normal")
 print(confidence_interval3norm[,c(1, 4, 8:11)])
+print("Synthesis with original data, bootstrap, 1 iteration and a 1e-32 cp with pool.normal")
 print(confidence_interval4norm[,c(1, 4, 8:11)])
+print("synthesis with original data, bootstrap, 5 iterations and a 1e-4 cp with pool.normal")
 print(confidence_interval5norm[,c(1, 4, 8:11)])
+print("synthesis with original data, bootstrap, 5 iterations and a 1e-32 cp with pool.normal")
 print(confidence_interval6norm[,c(1, 4, 8:11)])
+
+print("synthesis with imputed data with no bootstrap and a 1e-4 cp")
 print(confidence_interval7[,c(1, 4, 8:11)])
+print("synthesis with imputed data with no bootstrap and a 1e-32 cp")
 print(confidence_interval8[,c(1, 4, 8:11)])
+print("synthesis with imputed data with 5 iterations, bootstrap and a 1e-4 cp")
 print(confidence_interval9[,c(1, 4, 8:11)])
+print("synthesis with imputed data with 5 iterations, bootstrap and a 1e-32 cp")
 print(confidence_interval10[,c(1, 4, 8:11)])
+print("synthesis with imputed data with 1 iteration, bootstrap and a 1e-4 cp")
 print(confidence_interval11[,c(1, 4, 8:11)])
+print("synthesis with imputed data with 1 iteration, bootstrap and a 1e-32 cp")
 print(confidence_interval12[,c(1, 4, 8:11)])
+
+print("synthesis with imputed data with 5 iterations, bootstrap and a 1e-4 cp with pool.normal")
 print(confidence_interval9norm[,c(1, 4, 8:11)])
+print("synthesis with imputed data with 5 iterations, bootstrap and a 1e-32 cp with pool.normal")
 print(confidence_interval10norm[,c(1, 4, 8:11)])
+print("synthesis with imputed data with 1 iteration, bootstrap and a 1e-4 cp with pool.normal")
 print(confidence_interval11norm[,c(1, 4, 8:11)])
+print("synthesis with imputed data with 1 iteration, bootstrap and a 1e-32 cp with pool.normal")
 print(confidence_interval12norm[,c(1, 4, 8:11)])
 ```
 
